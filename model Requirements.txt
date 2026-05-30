@@ -1,0 +1,230 @@
+# ============================================
+# COMPLETE CODE WITH BALANCING + DOWNLOAD
+# ============================================
+
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+
+print("="*60)
+print("🚀 TRAINING WITH BALANCED DATASET")
+print("="*60)
+
+# Load data
+df = pd.read_csv('ckextended.csv')
+
+def parse_pixels(pixel_str):
+    pixels = np.array(pixel_str.split(), dtype='float32')
+    return pixels.reshape(48, 48, 1)
+
+X = np.array([parse_pixels(p) for p in df['pixels']])
+y = df['emotion'].values
+X = X / 255.0
+X_rgb = np.repeat(X, 3, axis=-1)
+
+# Map class 7 to 5
+y_mapped = y.copy()
+y_mapped[y_mapped == 7] = 5
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(
+    X_rgb, y_mapped, test_size=0.2, random_state=42, stratify=y_mapped
+)
+
+print(f"Original train shape: {X_train.shape}")
+print(f"Original class distribution: {np.bincount(y_train.astype(int))}")
+
+# ============================================
+# BALANCING FUNCTION
+# ============================================
+def balance_data(X, y):
+    """Oversampling for minority classes"""
+    X_balanced = []
+    y_balanced = []
+
+    # Target 50 samples per class
+    target_samples = 50
+
+    for class_id in range(7):
+        class_indices = np.where(y == class_id)[0]
+        X_class = X[class_indices]
+        y_class = y[class_indices]
+
+        if len(X_class) < target_samples:
+            # Oversample minority class
+            repeat_factor = target_samples // len(X_class) + 1
+            X_class = np.repeat(X_class, repeat_factor, axis=0)[:target_samples]
+            y_class = np.repeat(y_class, repeat_factor, axis=0)[:target_samples]
+
+        X_balanced.append(X_class)
+        y_balanced.append(y_class)
+
+    X_bal = np.concatenate(X_balanced, axis=0)
+    y_bal = np.concatenate(y_balanced, axis=0)
+
+    # Shuffle
+    indices = np.random.permutation(len(X_bal))
+    return X_bal[indices], y_bal[indices]
+
+# Apply balancing
+X_balanced, y_balanced = balance_data(X_train, y_train)
+print(f"\n✅ Balanced dataset: {X_balanced.shape}")
+print(f"Balanced class distribution: {np.bincount(y_balanced.astype(int))}")
+
+# ============================================
+# BUILD MODEL
+# ============================================
+base_model = MobileNetV2(
+    weights='imagenet',
+    include_top=False,
+    input_shape=(48, 48, 3)
+)
+base_model.trainable = False
+
+model = models.Sequential([
+    base_model,
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(256, activation='relu'),
+    layers.BatchNormalization(),
+    layers.Dropout(0.5),
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.3),
+    layers.Dense(7, activation='softmax')
+])
+
+model.compile(
+    optimizer=Adam(learning_rate=0.001),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+print("\n📊 Model Summary:")
+model.summary()
+
+# ============================================
+# TRAIN ON BALANCED DATA
+# ============================================
+print("\n🏋️ TRAINING ON BALANCED DATASET...")
+print("="*60)
+
+history = model.fit(
+    X_balanced, y_balanced,
+    validation_data=(X_test, y_test),
+    epochs=20,  # Increased epochs for better learning
+    batch_size=32,
+    verbose=1,
+    callbacks=[
+        tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=3, min_lr=1e-6),
+        tf.keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True)
+    ]
+)
+
+# ============================================
+# EVALUATION
+# ============================================
+print("\n" + "="*60)
+print("📊 EVALUATION RESULTS")
+print("="*60)
+
+test_loss, test_acc = model.evaluate(X_test, y_test, verbose=0)
+print(f"\n🔥🔥🔥 FINAL ACCURACY: {test_acc*100:.2f}% 🔥🔥🔥")
+
+# Per-class accuracy
+y_pred = model.predict(X_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+
+emotions = ['Anger', 'Disgust', 'Fear', 'Happy', 'Sadness', 'Surprise', 'Neutral']
+
+print("\n📈 PER-CLASS ACCURACY:")
+print("="*60)
+report = classification_report(y_test, y_pred_classes, target_names=emotions)
+print(report)
+
+# Visual confusion matrix
+cm = confusion_matrix(y_test, y_pred_classes)
+plt.figure(figsize=(10, 8))
+sns.heatmap(cm, annot=True, fmt='d', cmap='RdYlGn',
+            xticklabels=emotions, yticklabels=emotions)
+plt.title(f'Confusion Matrix - Accuracy: {test_acc*100:.2f}%', fontsize=14, fontweight='bold')
+plt.xlabel('Predicted', fontsize=12)
+plt.ylabel('Actual', fontsize=12)
+plt.show()
+
+# ============================================
+# VISUALIZE TRAINING HISTORY
+# ============================================
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+ax1.plot(history.history['accuracy'], label='Train Accuracy', linewidth=2)
+ax1.plot(history.history['val_accuracy'], label='Val Accuracy', linewidth=2)
+ax1.set_title('Model Accuracy Over Time', fontsize=12, fontweight='bold')
+ax1.set_xlabel('Epoch')
+ax1.set_ylabel('Accuracy')
+ax1.legend()
+ax1.grid(True)
+
+ax2.plot(history.history['loss'], label='Train Loss', linewidth=2)
+ax2.plot(history.history['val_loss'], label='Val Loss', linewidth=2)
+ax2.set_title('Model Loss Over Time', fontsize=12, fontweight='bold')
+ax2.set_xlabel('Epoch')
+ax2.set_ylabel('Loss')
+ax2.legend()
+ax2.grid(True)
+
+plt.tight_layout()
+plt.show()
+
+# ============================================
+# SAVE MODEL IN MULTIPLE FORMATS
+# ============================================
+print("\n💾 SAVING MODELS...")
+print("="*60)
+
+# Create directory
+os.makedirs('/content/drive/MyDrive/emotion_models', exist_ok=True)
+
+# Save as .keras (TensorFlow format)
+model.save('emotion_model.keras')
+model.save('/content/drive/MyDrive/emotion_models/emotion_model.keras')
+print("✅ Saved as emotion_model.keras")
+
+# Save as .h5 (universal format)
+model.save('emotion_model.h5')
+model.save('/content/drive/MyDrive/emotion_models/emotion_model.h5')
+print("✅ Saved as emotion_model.h5")
+
+# Save weights only (lightweight)
+model.save_weights('emotion_weights.h5')
+print("✅ Saved weights as emotion_weights.h5")
+
+# ============================================
+# DOWNLOAD TO COMPUTER
+# ============================================
+print("\n📥 DOWNLOADING MODELS...")
+print("="*60)
+
+from google.colab import files
+
+# Download .keras file
+files.download('emotion_model.keras')
+print("✅ emotion_model.keras downloaded")
+
+# Download .h5 file (recommended for most projects)
+files.download('emotion_model.h5')
+print("✅ emotion_model.h5 downloaded")
+
+print("\n" + "="*60)
+print(f"✅✅✅ TRAINING COMPLETE! ✅✅✅")
+print(f"📊 Final Accuracy: {test_acc*100:.2f}%")
+print(f"📁 Models saved to Google Drive")
+print(f"💾 Models downloaded to your computer")
+print("="*60)
