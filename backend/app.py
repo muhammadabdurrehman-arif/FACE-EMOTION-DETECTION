@@ -1,4 +1,4 @@
-# app.py - COMPLETE FIXED VERSION
+# Backened Code
 # ==========================================================
 
 import os
@@ -11,13 +11,13 @@ import logging
 logging.basicConfig(level=logging.ERROR)
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS
-import numpy as np
-import cv2
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-from tensorflow.keras.optimizers import Adam
-from collections import defaultdict, deque
+from flask_cors import CORS  #Allow frontend to call api from different port
+import numpy as np           #Numerical Operations on arrays
+import cv2                   #image processing and face detection
+import tensorflow as tf       #Deep Learning framework 
+from tensorflow.keras.models import load_model   #load .h5 save model file
+from tensorflow.keras.optimizers import Adam      #Optimizer for model compilation
+from collections import defaultdict, deque        
 import threading
 import time
 import urllib.request
@@ -496,9 +496,9 @@ def predict():
         if image is None:
             return jsonify({"error": "Invalid image"}), 400
         
-        print(f"📸 Processing uploaded image...")
+        print(f" Processing uploaded image...")
         results, processed = process_upload_image(image)
-        print(f"✅ Found {len(results)} face(s)")
+        print(f" Found {len(results)} face(s)")
         
         _, buffer = cv2.imencode('.jpg', processed)
         img_base64 = base64.b64encode(buffer).decode('utf-8')
@@ -680,12 +680,15 @@ def get_confusion_matrix():
     }))# ==========================================
 # MAIN
 # ==========================================
+# ==========================================
+# MAIN
+# ==========================================
 if __name__ == "__main__":
     print("="*60)
-    print(" EMOTION DETECTION API - UPLOAD FIXED VERSION")
+    print(" EMOTION DETECTION API - MobileNetV2")
     print("="*60)
     
-    print("\n[1/4] Loading REAL MobileNetV2 model...")
+    print("\n[1/4] Loading MobileNetV2 model...")
     success = load_model_file()
     
     if not success:
@@ -694,19 +697,21 @@ if __name__ == "__main__":
         print("="*60)
         print("\nPlease ensure 'emotion_model.h5' exists in the backend folder")
         print("="*60)
-        exit(1)
+        exit(1)  
     
     print("\n[2/4] Initializing face detectors...")
-    init_face_detectors()
+    init_face_detectors()  
     
-    print("\n[3/4] API Endpoints ready:")
-    print("   POST /predict       - Upload image (FIXED!)")
-    print("   POST /liveDetection - Live camera")
-    print("   GET  /stats         - Statistics")
+    print("\n[3/4] Checking face detector status...")
+    if face_cascade is None:
+        print("  WARNING: Face detector failed to load!")
+    else:
+        print("   Face detector ready")
     
     print("\n[4/4] Starting server...")
-    print("    http://0.0.0.0:5001")
-    print("\n API READY! Upload image should work now!")
+    print("   Open in browser: http://localhost:5001")
+    print("    DO NOT use: http://0.0.0.0:5001")
     print("="*60 + "\n")
     
-    app.run(host="0.0.0.0", port=5001, debug=True, threaded=True, use_reloader=False)
+    # Use 127.0.0.1 instead of 0.0.0.0 for local testing
+app.run(host="0.0.0.0", port=5001, debug=True, threaded=True, use_reloader=False)
